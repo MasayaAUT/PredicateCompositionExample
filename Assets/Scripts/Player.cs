@@ -2,7 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 using CanTarget = And<And<And<InRange, IsAlive>, LineOfSight>, IsType>;
-//using CanTarget = And<And<InRange, IsAlive>, Or<LineOfSight, IsType>>;
+using Underground = Or<And<And<InRange, IsAlive>, LineOfSight>, IsType>;
+
 
 public class Player : MonoBehaviour
 {
@@ -14,18 +15,22 @@ public class Player : MonoBehaviour
     [field: SerializeField] public LayerMask layerMask {  private set; get; }
     [field: SerializeField] public List<Enemy.EnemyType> enemyTypes { private set; get; }
 
-    CanTarget pred;
+    CanTarget canTarget;
+    Underground underground;
+
+    [SerializeField] bool useUndergroundAttack;
 
     private void Start()
     {
-        pred = PredChain.Start(new InRange()).And(new IsAlive()).And(new LineOfSight()).And(new IsType()).Build();
+        canTarget = PredChain.Start(new InRange()).And(new IsAlive()).And(new LineOfSight()).And(new IsType()).Build();
+        underground = PredChain.Start(new InRange()).And(new IsAlive()).And(new LineOfSight()).Or(new IsType()).Build();
     }
 
     // Update is called once per frame
     void Update()
     {
-        vertical = Input.GetAxis("Vertical");
-        horizontal = Input.GetAxis("Horizontal");
+        vertical = Input.GetAxisRaw("Vertical");
+        horizontal = Input.GetAxisRaw("Horizontal");
 
         Move();
 
@@ -45,15 +50,32 @@ public class Player : MonoBehaviour
     private void Attack()
     {
         var ctx = new TargetCtx(transform.position, range, layerMask, enemyTypes);
-        //var pred = PredChain.Start(new InRange()).And(new IsAlive()).And(new LineOfSight()).And(new IsType()).Build();
+        var pred = PredChain.Start(new InRange()).And(new IsAlive()).And(new LineOfSight()).And(new IsType()).Build();
 
-        Enemy[] enemyList = GameManager.instance.enemies.ToArray();
-        if (enemyList.Length > 0)
+        for (int i = GameManager.instance.enemies.Count - 1; i >= 0; i--)
         {
-            for (int i = 0; i < enemyList.Length; i++)
-            {
-                if (pred.Check(enemyList[i], ctx)) enemyList[i].TakeDamage();
-            }
+            var enemy = GameManager.instance.enemies[i];
+            if (pred.Check(enemy, in ctx))
+                enemy.TakeDamage();
+        }
+
+        //if (useUndergroundAttack)
+        //{
+        //    ApplyAttack(underground, GameManager.instance.enemies, ctx);
+        //}
+        //else
+        //{
+        //    ApplyAttack(canTarget, GameManager.instance.enemies, ctx);
+        //}
+    }
+
+    private void ApplyAttack<TPred>(in TPred pred, List<Enemy> enemies, in TargetCtx ctx) where TPred : IPred
+    {
+        for (int i = enemies.Count - 1; i >= 0; i--)
+        {
+            var enemy = enemies[i];
+            if (pred.Check(enemy, in ctx))
+                enemy.TakeDamage();
         }
     }
 }
